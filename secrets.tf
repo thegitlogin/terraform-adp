@@ -2,8 +2,8 @@
 # Enable secrets engines
 #----------------------------------------------------------
 resource "vault_mount" "kv-v2" {
-  depends_on = [vault_namespace.adp]
-  provider = vault.adp
+  depends_on = [vault_namespace.finance]
+  provider = vault.finance
   path = "kv-v2"
   type = "kv-v2"
 }
