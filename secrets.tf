@@ -1,11 +1,9 @@
 #----------------------------------------------------------
 # Enable secrets engines
 #----------------------------------------------------------
-
-# Enable kv-v2 secrets engine in the finance namespace
 resource "vault_mount" "kv-v2" {
-  depends_on = [vault_namespace.finance]
-  provider = vault.finance
+  depends_on = [vault_namespace.adp]
+  provider = vault.adp
   path = "kv-v2"
   type = "kv-v2"
 }
@@ -16,19 +14,49 @@ resource "vault_mount" "mount_transform" {
   type = "transform"
 }
 
-# Create an alphabet
+# Create alphabet
 resource "vault_transform_alphabet" "numerics" {
   path = vault_mount.mount_transform.path
   name = "numerics"
   alphabet = "0123456789"
 }
 
-# Create a transformation template
+resource "vault_transform_alphabet" "alphanumericsupper" {
+  path = vault_mount.mount_transform.path
+  name = "alphanumericsupper"
+  alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+}
+
+# Create transformation template
 resource "vault_transform_template" "ccn" {
   path = vault_mount.mount_transform.path
   name = "ccn"
   type = "regex"
   pattern = "(\\d{4})-(\\d{4})-(\\d{4})-(\\d{4})"
+  alphabet = vault_transform_alphabet.numerics.name
+}
+
+resource "vault_transform_template" "ccn-mask-tmpl" {
+  path = vault_mount.mount_transform.path
+  name = "ccn-mask-tmpl"
+  type = "masking"
+  pattern = "(\\d{4})-(\\d{4})-(\\d{4})-\\d{4}"
+  alphabet = vault_transform_alphabet.numerics.name
+}
+
+resource "vault_transform_template" "ssn" {
+  path = vault_mount.mount_transform.path
+  name = "ssn"
+  type = "regex"
+  pattern = "(\\d{3})-(\\d{2})-(\\d{4})"
+  alphabet = vault_transform_alphabet.numerics.name
+}
+
+resource "vault_transform_template" "ssn-mask-tmpl" {
+  path = vault_mount.mount_transform.path
+  name = "ssn-mask-tmpl"
+  type = "masking"
+  pattern = "(\\d{3})-(\\d{2})-\\d{4}"
   alphabet = vault_transform_alphabet.numerics.name
 }
 
@@ -39,35 +67,73 @@ resource "vault_transform_transformation" "ccn-fpe" {
   type = "fpe"
   template = vault_transform_template.ccn.name
   tweak_source = "internal"
-  # payments here listed by name and not reference to avoid circular dependency.
-  # Vault does not require dependencies like these to exist prior to creating
-  # other things that reference them, but they may simply not work until they do
-  # exist.
-  allowed_roles = ["payments"]
+
+  allowed_roles = ["encryption"]
 }
 
-# Create a role named 'payments'
-resource "vault_transform_role" "payments" {
+resource "vault_transform_transformation" "ccn-mask" {
   path = vault_mount.mount_transform.path
-  name = "payments"
-  transformations = [vault_transform_transformation.ccn-fpe.name]
+  name = "ccn-mask"
+  type = "masking"
+  template = vault_transform_template.ccn-mask-tmpl.name
+  masking_character = "#"
+
+  allowed_roles = ["partial-decrypt"]
 }
+
+
+# Create a transformation named ssn-fpe
+resource "vault_transform_transformation" "ssn-fpe" {
+  path = vault_mount.mount_transform.path
+  name = "ssn-fpe"
+  type = "fpe"
+  template = vault_transform_template.ssn.name
+  tweak_source = "internal"
+
+  allowed_roles = ["encryption"]
+}
+
+resource "vault_transform_transformation" "ssn-mask" {
+  path = vault_mount.mount_transform.path
+  name = "ssn-mask"
+  type = "masking"
+  template = vault_transform_template.ssn-mask-tmpl.name
+  masking_character = "#"
+
+  allowed_roles = ["partial-decrypt"]
+}
+
+# Create a role 
+resource "vault_transform_role" "encryption" {
+  path = vault_mount.mount_transform.path
+  name = "encryption"
+  transformations = [vault_transform_transformation.ccn-fpe.name, vault_transform_transformation.ssn-fpe.name]
+}
+
+resource "vault_transform_role" "partial-decrypt" {
+  path = vault_mount.mount_transform.path
+  name = "partial-decrypt"
+  transformations = [vault_transform_transformation.ccn-mask.name, vault_transform_transformation.ssn-mask.name]
+}
+
 
 
 #-------------------------------------------------------------------
 # Test the transformation
 #-------------------------------------------------------------------
-data "vault_transform_encode" "encoded" {
-  path = vault_transform_role.payments.path
-  role_name = "payments"
-  value = "1111-2222-3333-4444"
+#data "vault_transform_encode" "encoded" {
+#  path = vault_transform_role.encryption.path
+#  role_name = "encryption"
+#  value = "1111-2222-3333-4444"
 
-  depends_on = [vault_transform_role.payments]
-}
+#  depends_on = [vault_transform_role.encryption]
+#}
 
-output "encoded" {
-  value = data.vault_transform_encode.encoded.encoded_value
-}
+#output "encoded" {
+#  value = data.vault_transform_encode.encoded.encoded_value
+#}
+
+
 
 # resource "local_file" "encoded" {
 #   content = data.vault_transform_encode.encoded.encoded_value
