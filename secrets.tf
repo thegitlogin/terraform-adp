@@ -39,7 +39,7 @@ resource "vault_transform_template" "ccn" {
 resource "vault_transform_template" "ccn-mask-tmpl" {
   path = vault_mount.mount_transform.path
   name = "ccn-mask-tmpl"
-  type = "masking"
+  type = "regex"
   pattern = "(\\d{4})-(\\d{4})-(\\d{4})-\\d{4}"
   alphabet = vault_transform_alphabet.numerics.name
 }
@@ -55,7 +55,7 @@ resource "vault_transform_template" "ssn" {
 resource "vault_transform_template" "ssn-mask-tmpl" {
   path = vault_mount.mount_transform.path
   name = "ssn-mask-tmpl"
-  type = "masking"
+  type = "regex"
   pattern = "(\\d{3})-(\\d{2})-\\d{4}"
   alphabet = vault_transform_alphabet.numerics.name
 }
