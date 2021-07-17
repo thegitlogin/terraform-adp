@@ -52,6 +52,14 @@ resource "vault_transform_template" "ssn" {
   alphabet = vault_transform_alphabet.numerics.name
 }
 
+resource "vault_transform_template" "dl-tmpl" {
+  path = vault_mount.mount_transform.path
+  name = "dl-tmpl"
+  type = "regex"
+  pattern = "(\\d{10})"
+  alphabet = vault_transform_alphabet.alphanumericsupper.name
+}
+
 resource "vault_transform_template" "ssn-mask-tmpl" {
   path = vault_mount.mount_transform.path
   name = "ssn-mask-tmpl"
@@ -88,6 +96,16 @@ resource "vault_transform_transformation" "ssn-fpe" {
   name = "ssn-fpe"
   type = "fpe"
   template = vault_transform_template.ssn.name
+  tweak_source = "internal"
+
+  allowed_roles = ["encryption"]
+}
+
+resource "vault_transform_transformation" "dl-fpe" {
+  path = vault_mount.mount_transform.path
+  name = "dl-fpe"
+  type = "fpe"
+  template = vault_transform_template.dl-tmpl.name
   tweak_source = "internal"
 
   allowed_roles = ["encryption"]
